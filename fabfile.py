@@ -9,41 +9,51 @@ from cuisine import *
 
 v = vagrant.Vagrant()
 
+
 def provision(settings):
-    if not provision_packages(settings['packages'],settings['package_provider']):
+    if not provision_packages(settings['packages'], settings['package_provider']):
         print "Unable to provision!"
         return False
     if not provision_gems(settings['gems']):
         print "Unable to provision gems!"
-        return False 
+        return False
     return True
 
-def provision_packages(packages='',provider=None):
+
+def provision_packages(packages='', provider=None):
     if provider is None:
         return False
 
     with mode_sudo():
         select_package(provider)
-        package_ensure(packages,update=False)
+        package_ensure(packages, update=False)
 
     return True
+
 
 def provision_gems(gems=''):
     with mode_sudo():
         for gem in gems:
             if not gem in run('gem list %s' % (gem,)):
-                run('gem install --no-ri --no-rdoc %s' % (gem,))
+                if ":" in gem:
+                    g, v = gem.split(":")
+                    run('gem install --no-ri --no-rdoc %s -v %s' % (g, v))
+                else:
+                    run('gem install --no-ri --no-rdoc %s' % (gem,))
 
     return True
+
 
 def get_target():
     targetName = env.hosts_to_targets[env.host_string]
     s = env.targets[targetName] if targetName in env.targets else {}
-    return targetName,s
+    return targetName, s
+
 
 def set_target(s):
     targetName = env.hosts_to_targets[env.host_string]
     env.targets[targetName] = s
+
 
 def bootstrap(*targets):
     env.hosts = []
@@ -53,15 +63,16 @@ def bootstrap(*targets):
 
     for target in targets:
         print "Bringing up %s..." % (target,)
-        v.up(no_provision=True,vm_name=target)
+        v.up(no_provision=True, vm_name=target)
         host = v.user_hostname_port(vm_name=target)
         env.hosts.append(host)
         env.hosts_to_targets[host] = target
         env.targets[target] = {}
-        print "%s is up..." % (target,) 
+        print "%s is up..." % (target,)
         env.key_filename = v.keyfile(vm_name=target)
     return True
-    
+
+
 def config_openresty():
     avail_targets = {
         'trusty_64': {
@@ -69,7 +80,7 @@ def config_openresty():
             'packages': 'ruby ruby-dev build-essential libreadline-dev libncurses5-dev libpcre3-dev libssl-dev perl',
             'gems': ['fpm'],
             'fpm': {
-                'deps': ['libreadline6 >= 6.2-8','libpcre3 >= 8'],
+                'deps': ['libreadline6 >= 6.2-8', 'libpcre3 >= 8'],
                 'target': 'deb',
                 'platform': 'trusty',
                 'iteration': '2.openresty',
@@ -90,7 +101,7 @@ def config_openresty():
             'packages': 'ruby1.9.1 rubygems build-essential libreadline-dev libncurses5-dev libpcre3-dev libssl-dev perl',
             'gems': ['fpm'],
             'fpm': {
-                'deps': ['libreadline6 >= 6.2-8','libpcre3 >= 8'],
+                'deps': ['libreadline6 >= 6.2-8', 'libpcre3 >= 8'],
                 'target': 'deb',
                 'platform': 'trusty',
                 'iteration': '2.openresty',
@@ -109,9 +120,9 @@ def config_openresty():
         'sl65_64': {
             'package_provider': 'yum',
             'packages': 'rpm-build ruby ruby-devel rubygems readline-devel pcre-devel openssl-devel perl make gcc',
-            'gems': ['fpm'],
+            'gems': ['fpm:1.4.0'],
             'fpm': {
-                'deps': ['readline >= 5','pcre >= 7.8-6'],
+                'deps': ['readline >= 5', 'pcre >= 7.8-6'],
                 'target': 'rpm',
                 'platform': 'el6',
                 'iteration': '1.openresty.el6',
@@ -132,7 +143,7 @@ def config_openresty():
             'packages': 'rpm-build ruby ruby-devel rubygems readline-devel pcre-devel openssl-devel perl make gcc',
             'gems': ['fpm'],
             'fpm': {
-                'deps': ['readline >= 5','pcre >= 7.8-6'],
+                'deps': ['readline >= 5', 'pcre >= 7.8-6'],
                 'target': 'rpm',
                 'platform': 'el7',
                 'iteration': '1.openresty.el7',
@@ -150,8 +161,9 @@ def config_openresty():
         }
     }
 
-    targetName,s = get_target()
+    targetName, s = get_target()
     env.targets[targetName] = avail_targets[targetName]
+
 
 @parallel
 def prereqs_openresty():
@@ -185,26 +197,27 @@ default_configure_cmd = (
     '--with-cc-opt="-O2 -g -pipe -Wp,-D_FORTIFY_SOURCE=2 -fexceptions -fstack-protector --param=ssp-buffer-size=4 -m64 -mtune=generic"'
 )
 
-@parallel(pool_size=2)
-def build_openresty(version='1.11.2.1',configure_cmd=default_configure_cmd):
 
+@parallel(pool_size=2)
+def build_openresty(version='1.11.2.1', configure_cmd=default_configure_cmd):
     make_cmd = 'make -j4'
     install_cmd = 'make all install DESTDIR=$PWD/buildoutput'
 
     source_file = 'openresty-%s.tar.gz' % (version,)
-    source_url = 'http://openresty.org/download' #'http://10.131.237.143/openresty'
+    source_url = 'http://openresty.org/download'  # 'http://10.131.237.143/openresty'
 
     ensure_local_dir('build-temp')
 
     with lcd('./build-temp'):
         if not local_file_exists(source_file):
-            local('wget -O %s %s/%s' % (source_file,source_url,source_file))
+            local('wget -O %s %s/%s' % (source_file, source_url, source_file))
             local('wget https://github.com/pintsized/lua-resty-http/archive/v0.09.tar.gz -O lua-resty-http.tar.gz')
-            local('wget https://github.com/openresty/stream-lua-nginx-module/archive/master.tar.gz -O stream-lua-nginx-module.tar.gz')
+            local(
+                'wget https://github.com/openresty/stream-lua-nginx-module/archive/master.tar.gz -O stream-lua-nginx-module.tar.gz')
 
-        #console.confirm('Do you want to continue?', default=True)
+        # console.confirm('Do you want to continue?', default=True)
         ensure_remote_dir('build-temp')
-        put(source_file,'build-temp')
+        put(source_file, 'build-temp')
         put('lua-resty-http.tar.gz', 'build-temp')
         put('stream-lua-nginx-module.tar.gz', 'build-temp')
         with cd('build-temp'):
@@ -217,15 +230,14 @@ def build_openresty(version='1.11.2.1',configure_cmd=default_configure_cmd):
                 run("sed -i 's/for my $key (qw(/for my $key (qw(http /g' configure")
                 # add external modules
                 run('mv ../stream-lua-nginx-module-master bundle/')
-                configure_cmd+=' --with-stream --with-stream_ssl_module --add-module=bundle/stream-lua-nginx-module-master'
+                configure_cmd += ' --with-stream --with-stream_ssl_module --add-module=bundle/stream-lua-nginx-module-master'
                 run('ls -la bundle/')
                 # build
-                run('%s && %s && %s' % (configure_cmd,make_cmd,install_cmd))
+                run('%s && %s && %s' % (configure_cmd, make_cmd, install_cmd))
 
 
 @parallel
 def package_openresty(version='1.11.2.1'):
-
     fpm_command = (
         "fpm -v '%(version)s' --iteration '%(iteration)s' %(deps)s "
         "--url 'https://github.com/amuraru/ngx-openresty-build' "
@@ -240,7 +252,7 @@ def package_openresty(version='1.11.2.1'):
         "-n nginx -s dir -t %(target)s -- *"
     )
 
-    targetName,s = get_target()
+    targetName, s = get_target()
 
     ext = s['fpm']['target']
 
@@ -263,12 +275,12 @@ def package_openresty(version='1.11.2.1'):
                 if destDir:
                     ensure_remote_dir(destDir)
 
-                put('./' + localpath,remotepath,mirror_local_mode=True)
+                put('./' + localpath, remotepath, mirror_local_mode=True)
 
             if remote_file_exists('./openresty-preinstall.sh'):
-                args['scripts'].append('--before-install ../openresty-preinstall.sh') 
+                args['scripts'].append('--before-install ../openresty-preinstall.sh')
             if remote_file_exists('./openresty-postinstall.sh'):
-                args['scripts'].append('--after-install ../openresty-postinstall.sh') 
+                args['scripts'].append('--after-install ../openresty-postinstall.sh')
 
             args['scripts'] = ' '.join(args['scripts'])
 
@@ -278,8 +290,9 @@ def package_openresty(version='1.11.2.1'):
                 result = run(fpm_command % args)
 
         with cd('buildoutput'), lcd('build-out'):
-            get('*.%s' % (ext,),'.')
+            get('*.%s' % (ext,), '.')
             run('rm -f *.%s' % (ext,))
+
 
 @parallel
 def build_clean():
@@ -287,26 +300,29 @@ def build_clean():
     with cd('~'):
         run('rm -rf build-temp')
 
+
 @parallel
 def shutdown():
     v.halt(vm_name=get_target()[0])
 
+
 def local_file_exists(file):
     with settings(warn_only=True, hide=True):
-        return local('test -f "%s"' % (file,),capture=True).succeeded
+        return local('test -f "%s"' % (file,), capture=True).succeeded
+
 
 def remote_file_exists(file):
     with settings(warn_only=True, hide=True):
         return run('test -f "%s"' % (file,)).succeeded
 
+
 def ensure_local_dir(dir):
     with settings(warn_only=True, hide=True):
-        if local('test -d "%s"' % (dir,),capture=True).failed:
+        if local('test -d "%s"' % (dir,), capture=True).failed:
             local('mkdir -p %s' % (dir,))
+
 
 def ensure_remote_dir(dir):
     with settings(warn_only=True, hide=True):
-
         if run('test -d "%s"' % (dir,)).failed:
             run('mkdir -p %s' % (dir,))
-
