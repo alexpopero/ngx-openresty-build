@@ -34,7 +34,7 @@ def provision_packages(packages='', provider=None):
 def provision_gems(gems=''):
     with mode_sudo():
         for gem in gems:
-            if not gem in run('gem list %s' % (gem,)):
+            if not gem in run('gem list %s' % (gem.split(":")[0],)):
                 if ":" in gem:
                     g, v = gem.split(":")
                     run('gem install --no-ri --no-rdoc %s -v %s' % (g, v))
@@ -120,7 +120,7 @@ def config_openresty():
         'sl65_64': {
             'package_provider': 'yum',
             'packages': 'rpm-build ruby ruby-devel rubygems readline-devel pcre-devel openssl-devel perl make gcc',
-            'gems': ['fpm:1.4.0'],
+            'gems': ['json:1.7.7', 'fpm:1.4.0'],
             'fpm': {
                 'deps': ['readline >= 5', 'pcre >= 7.8-6'],
                 'target': 'rpm',
