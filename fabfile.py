@@ -230,7 +230,8 @@ def build_openresty(version='1.11.2.5', configure_cmd=default_configure_cmd):
                 run("sed -i 's/for my $key (qw(/for my $key (qw(http /g' configure")
                 # add external modules
                 run('mv ../stream-lua-nginx-module-master bundle/')
-                configure_cmd += ' --with-stream --with-stream_ssl_module --add-module=bundle/stream-lua-nginx-module-master'
+                # https://github.com/openresty/stream-lua-nginx-module/issues/40
+                #configure_cmd += ' --with-stream --with-stream_ssl_module --add-module=bundle/stream-lua-nginx-module-master'
                 run('ls -la bundle/')
                 # build
                 run('%s && %s && %s' % (configure_cmd, make_cmd, install_cmd))
